@@ -34,7 +34,7 @@ def load_all_data():
     
     df_students = pd.read_excel(FILE_NAME, sheet_name="Students_Data")
     df_users = pd.read_excel(FILE_NAME, sheet_name="Users")
-    df_preds = pd.read_excel(FILE_NAME, sheet_name="Prediction")
+    df_preds = pd.read_excel(FILE_NAME, sheet_name="Predictions")
     return df_students, df_users, df_preds
 
 def save_all_data(s_df, u_df, p_df):
