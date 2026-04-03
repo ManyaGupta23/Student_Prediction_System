@@ -151,4 +151,67 @@ if st.session_state.login:
             st.subheader("Register New Student")
             with st.form("student_reg"):
                 c1, c2 = st.columns(2)
-                nid = c1.text_input("Student
+                nid = c1.text_input("Student ID (Unique)")
+                nname = c2.text_input("Full Name")
+                
+                c3, c4, c5 = st.columns(3)
+                natt = c3.number_input("Attendance %", 0, 100, 75)
+                nhrs = c4.number_input("Study Hours", 0, 24, 4)
+                nim = c5.number_input("Internal Marks", 0, 100, 50)
+                
+                c6, c7 = st.columns(2)
+                nas = c6.number_input("Assignment Score", 0, 100, 50)
+                nprev = c7.selectbox("Previous Result", ["A", "B", "C", "Fail"])
+                
+                nextra = st.selectbox("Extra Activities", ["Yes", "No"])
+                nfinal = st.selectbox("Final Result", ["A", "B", "C", "Fail"])
+                nperf = st.number_input("Performance Index", 0.0, 100.0, 50.0)
+
+                if st.form_submit_button("Save Student to Excel"):
+                    # 1. Update Students Data
+                    new_s = pd.DataFrame([{"Student_ID": nid, "Name": nname, "Attendence": natt, "Study_Hours": nhrs, "Internal_Marks": nim, "Assignment_Score": nas, "Previous_Result": nprev, "Extra_Activities": nextra, "Final_Result": nfinal, "Performance_Index": nperf}])
+                    df_students = pd.concat([df_students, new_s], ignore_index=True)
+                    
+                    # 2. Update Users (Login credentials)
+                    new_u = pd.DataFrame([{"Username": nid, "Password": "123", "Role": "student"}])
+                    df_users = pd.concat([df_users, new_u], ignore_index=True)
+                    
+                    # 3. Update Predictions
+                    new_p = pd.DataFrame([{"Student_ID": nid, "Predicted_Result": "AWAITING"}])
+                    df_preds = pd.concat([df_preds, new_p], ignore_index=True)
+                    
+                    save_all_sheets(df_students, df_users, df_preds)
+                    st.success("Registration complete! Login: ID / Pass: 123")
+
+    # --- STUDENT DASHBOARD ---
+    elif role == "student":
+        st.markdown('<div class="user-icon">🧑‍🎓</div>', unsafe_allow_html=True)
+        st.title("My Academic Portal")
+        
+        # Pull data for the logged-in ID
+        curr_user = str(st.session_state.username)
+        my_record = df_students[df_students['Student_ID'].astype(str) == curr_user]
+
+        if not my_record.empty:
+            row = my_record.iloc[0]
+            st.subheader(f"Welcome back, {row['Name']}")
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Current Attendance", f"{row['Attendence']}%")
+            c2.metric("Latest Grade", row['Final_Result'])
+            c3.metric("Performance Index", row['Performance_Index'])
+            
+            st.divider()
+            
+            # Show Details with Progress bar
+            st.write("**Attendance Analysis**")
+            st.progress(int(row['Attendence']))
+            
+            # Display other info
+            st.write(f"**Study Habits:** {row['Study_Hours']} hours/day | **Assignments:** {row['Assignment_Score']}/100")
+            
+            # PDF Download
+            pdf_file = generate_pdf(row)
+            st.download_button("📥 Download Official Report Card", pdf_file, file_name=f"Report_{row['Student_ID']}.pdf")
+        else:
+            st.error(f"No record found for ID: {curr_user}. Please contact the Administration.")
