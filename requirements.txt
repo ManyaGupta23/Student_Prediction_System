@@ -1,6 +1,6 @@
 streamlit
 pandas
-openoyxl
-scikit-learn
 matplotlib
+scikit-learn
+openpyxl
 reportlab
