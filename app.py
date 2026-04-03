@@ -33,7 +33,7 @@ def load_and_sync_data():
     try:
         s_df = pd.read_excel(FILE_NAME, sheet_name="Students_Data")
         u_df = pd.read_excel(FILE_NAME, sheet_name="Users")
-        p_df = pd.read_excel(FILE_NAME, sheet_name="Prediction")
+        p_df = pd.read_excel(FILE_NAME, sheet_name="Predictions")
     except Exception as e:
         st.error(f"Error reading sheets: {e}. Check if sheet names are correct.")
         return None, None, None
@@ -99,8 +99,8 @@ with st.sidebar:
         p_input = st.text_input("Password", type="password")
         if st.button("Login"):
             # Ensure ID comparison is string-based
-            match = df_users[(df_users['Username'].astype(str) == u_input) & 
-                             (df_users['Password'].astype(str) == p_input)]
+            match = df_users[(df_users['Username'].astype(str) == u_in) & 
+                             (df_users['Password'].astype(str) == p_in)]
             if not match.empty:
                 st.session_state.login = True
                 st.session_state.role = match.iloc[0]['Role'].strip().lower()
