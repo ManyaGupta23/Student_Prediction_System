@@ -7,9 +7,9 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 
 # ==========================================
-# 1. PAGE CONFIG & THEMING
+# 1. PAGE CONFIG & UI THEME
 # ==========================================
-st.set_page_config(page_title="Student Analytics", layout="wide", page_icon="🎓")
+st.set_page_config(page_title="Student Analytics Portal", layout="wide", page_icon="🎓")
 
 st.markdown("""
 <style>
@@ -23,19 +23,18 @@ st.markdown("""
 FILE_NAME = "student_performance.xlsx"
 
 # ==========================================
-# 2. DATA ENGINE (Multi-Sheet Sync)
+# 2. DATA ENGINE
 # ==========================================
 def load_and_clean_data():
     if not os.path.exists(FILE_NAME):
-        st.error(f"Error: {FILE_NAME} not found. Please upload the Excel file.")
+        st.error(f"Error: {FILE_NAME} not found. Please ensure the Excel file is in the project folder.")
         return None, None, None
 
-    # Load all 3 sheets
     s_df = pd.read_excel(FILE_NAME, sheet_name="Students_Data")
     u_df = pd.read_excel(FILE_NAME, sheet_name="Users")
     p_df = pd.read_excel(FILE_NAME, sheet_name="Predictions")
 
-    # CLEANING: Remove invisible spaces from column headers
+    # Strip column spaces
     s_df.columns = s_df.columns.str.strip()
     u_df.columns = u_df.columns.str.strip()
     p_df.columns = p_df.columns.str.strip()
@@ -87,15 +86,11 @@ def generate_pdf(row):
     return buffer
 
 # ==========================================
-# 4. LOGIN SYSTEM (Updated with Image & Logic Fix)
-# ==========================================
-# ==========================================
-# 4. LOGIN SYSTEM (Layout with Logout)
+# 4. LOGIN & AUTHENTICATION
 # ==========================================
 if "login" not in st.session_state:
     st.session_state.login = False
 
-# CASE 1: USER IS NOT LOGGED IN -> Show Portal Image & Login Form
 if not st.session_state.login:
     col_login, col_img = st.columns([1, 2])
     
@@ -105,16 +100,20 @@ if not st.session_state.login:
         input_pass = st.text_input("Password", type="password")
         
         if st.button("Sign In"):
-            u_df_clean = df_users.copy()
-            u_df_clean['Username'] = u_df_clean['Username'].astype(str).str.strip()
+            # NORMALIZATION: Handles the 101.0 vs 101 issue
+            u_clean = df_users.copy()
+            u_clean['Username'] = u_clean['Username'].astype(str).str.replace('.0', '', regex=False).str.strip()
+            u_clean['Password'] = u_clean['Password'].astype(str).str.strip()
             
-            match = u_df_clean[(u_df_clean['Username'] == str(input_user).strip()) & 
-                               (u_df_clean['Password'].astype(str).str.strip() == str(input_pass).strip())]
+            user_str = str(input_user).strip()
+            pass_str = str(input_pass).strip()
+            
+            match = u_clean[(u_clean['Username'] == user_str) & (u_clean['Password'] == pass_str)]
             
             if not match.empty:
                 st.session_state.login = True
                 st.session_state.role = match.iloc[0]['Role'].strip().lower()
-                st.session_state.username = str(input_user).strip()
+                st.session_state.username = user_str
                 st.rerun()
             else:
                 st.error("Invalid Username or Password")
@@ -124,125 +123,90 @@ if not st.session_state.login:
         if os.path.exists("portal_image.png"):
             st.image("portal_image.png", use_container_width=True)
         else:
-            st.info("💡 Place 'portal_image.png' in folder for the welcome visual.")
+            st.info("💡 Note: Place 'portal_image.png' in folder to show the welcome image.")
 
-# CASE 2: USER IS LOGGED IN -> Show Logout Button in Sidebar
+# ==========================================
+# 5. DASHBOARD ROUTING
+# ==========================================
 else:
+    # --- Sidebar (Persistent Logout) ---
     with st.sidebar:
-        st.write(f"### Welcome, {st.session_state.username}")
-        st.write(f"**Role:** {st.session_state.role.upper()}")
+        st.markdown('<div class="user-icon">👤</div>', unsafe_allow_html=True)
+        st.write(f"### Hello, {st.session_state.username}")
+        st.write(f"Access: **{st.session_state.role.upper()}**")
         st.divider()
         if st.button("🚪 Logout", type="primary", use_container_width=True):
-            st.session_state.login = False
             st.session_state.clear()
             st.rerun()
-  # ==========================================
-# 5. DASHBOARDS (RBAC Implementation)
-# ==========================================
-if st.session_state.login:
-    role = st.session_state.role
 
-    # --- ADMIN DASHBOARD (Full Access) ---
-    if role == "admin":
-        st.markdown('<div class="user-icon">👤</div>', unsafe_allow_html=True)
+    # --- ADMIN DASHBOARD ---
+    if st.session_state.role == "admin":
         st.title("Administrator Control Panel")
-
         tab1, tab2 = st.tabs(["📊 Records Management", "➕ Register New Student"])
-
+        
         with tab1:
             st.subheader("Master Student Database")
             st.dataframe(df_students, use_container_width=True)
-            # ... (Your existing Delete logic here) ...
+            
+            st.divider()
+            del_id = st.text_input("Enter Student ID to delete:")
+            if st.button("Delete Permanently", type="primary"):
+                if del_id:
+                    # Sync removal across all sheets
+                    df_students = df_students[df_students['Student_ID'].astype(str).str.replace('.0', '', regex=False) != str(del_id)]
+                    df_users = df_users[df_users['Username'].astype(str).str.replace('.0', '', regex=False) != str(del_id)]
+                    df_preds = df_preds[df_preds['Student_ID'].astype(str).str.replace('.0', '', regex=False) != str(del_id)]
+                    save_all_sheets(df_students, df_users, df_preds)
+                    st.success(f"Record {del_id} deleted.")
+                    st.rerun()
 
         with tab2:
             st.subheader("Institutional Enrollment")
-            # The Add Student form remains here, exclusive to Admin
             with st.form("add_form"):
-                # ... (Your existing form code here) ...
+                c1, c2 = st.columns(2)
+                nid = c1.text_input("New Student ID")
+                nname = c2.text_input("Full Name")
+                # ... add other inputs as needed ...
                 if st.form_submit_button("Save Student"):
-                    # ... (Your existing save logic here) ...
-                    st.success("Student added to system successfully.")
+                    # Add Logic to Append Dataframe and save_all_sheets()
+                    st.success("New Student Registered!")
 
-    # --- TEACHER DASHBOARD (Analytics & Predictions) ---
-    elif role == "teacher":
-        st.markdown('<div class="user-icon">👨‍🏫</div>', unsafe_allow_html=True)
+    # --- TEACHER DASHBOARD ---
+    elif st.session_state.role == "teacher":
         st.title("Teacher Analytics Portal")
-
         tab1, tab2 = st.tabs(["📈 Performance Analytics", "🔍 Individual Prediction"])
-
+        
         with tab1:
             st.subheader("Class-Wide Performance Trends")
-            # Adding Graphs for Teacher
-            col_a, col_b = st.columns(2)
-            
-            with col_a:
-                st.write("**Attendance vs. Performance Index**")
-                st.scatter_chart(data=df_students, x="Attendence", y="Performance_Index", color="#ff4b4b")
-            
-            with col_b:
-                st.write("**Grade Distribution**")
-                grade_counts = df_students['Final_Result'].value_counts()
-                st.bar_chart(grade_counts)
+            st.scatter_chart(data=df_students, x="Attendence", y="Performance_Index", color="#ff4b4b")
+            st.bar_chart(df_students['Final_Result'].value_counts())
 
         with tab2:
-            st.subheader("Predict Student Risk")
-            selected_student = st.selectbox("Select Student for Analysis", df_students['Name'].unique())
-            # Logic to show specific student graph or prediction result
-            student_data = df_students[df_students['Name'] == selected_student].iloc[0]
-            st.info(f"Predicting performance for {selected_student} based on current metrics...")
-            # ... (Your Random Forest Prediction code here) ...
-# ==========================================
-# 5. STUDENT DASHBOARD (Cleaned & Fixed)
-# ==========================================
-elif st.session_state.login and st.session_state.role == "student":
-    st.markdown('<div class="user-icon">🧑‍🎓</div>', unsafe_allow_html=True)
-    st.title("Student Academic Portal")
-    
-    # Robust ID Matching
-    curr_id = str(st.session_state.username).strip()
-    
-    # Clean the dataframe IDs for comparison to handle Excel float issues (e.g., 101.0 -> 101)
-    df_students_temp = df_students.copy()
-    df_students_temp['Student_ID'] = df_students_temp['Student_ID'].astype(str).str.strip().str.replace('.0', '', regex=False)
-    
-    my_row = df_students_temp[df_students_temp['Student_ID'] == curr_id]
+            st.subheader("Predict Student Performance")
+            selected_student = st.selectbox("Select Student", df_students['Name'].unique())
+            st.info(f"Analyzing metrics for {selected_student}...")
 
-    if not my_row.empty:
-        data = my_row.iloc[0]
-        st.subheader(f"Welcome, {data['Name']}")
+    # --- STUDENT DASHBOARD ---
+    elif st.session_state.role == "student":
+        st.title("Student Academic Portal")
         
-        # Dashboard Layout
-        c1, c2, c3 = st.columns(3)
+        # Normalize IDs for previous students
+        s_clean = df_students.copy()
+        s_clean['Student_ID'] = s_clean['Student_ID'].astype(str).str.replace('.0', '', regex=False).str.strip()
         
-        # Formatting Attendance safely
-        try:
-            att_val = f"{int(float(data['Attendence']))}%"
-        except:
-            att_val = f"{data['Attendence']}%"
-            
-        c1.metric("Attendance", att_val)
-        c2.metric("Grade", data['Final_Result'])
-        c3.metric("Study Hours", data['Study_Hours'])
-        
-        st.divider()
-        
-        # Visual progress bar
-        try:
-            st.write("**Attendance Progress**")
-            st.progress(int(float(data['Attendence'])) / 100)
-        except:
-            pass
+        my_row = s_clean[s_clean['Student_ID'] == st.session_state.username]
 
-        # Generate and Download PDF
-        # We wrap this in a button to ensure it only generates when needed
-        pdf_report = generate_pdf(data)
-        st.download_button(
-            label="📥 Download Official Report Card",
-            data=pdf_report,
-            file_name=f"Report_{curr_id}.pdf",
-            mime="application/pdf",
-            key="student_download_pdf"
-        )
-    else:
-        st.error(f"Record for ID {curr_id} not found in Student_Data. Please contact the administrator.")
+        if not my_row.empty:
+            data = my_row.iloc[0]
+            st.subheader(f"Welcome, {data['Name']}")
             
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Attendance", f"{data['Attendence']}%")
+            col2.metric("Grade", data['Final_Result'])
+            col3.metric("Study Hours", data['Study_Hours'])
+            
+            st.divider()
+            pdf_report = generate_pdf(data)
+            st.download_button("📥 Download Official Report Card", pdf_report, file_name=f"Report_{st.session_state.username}.pdf")
+        else:
+            st.error("Data not found for your ID. Please contact Admin.")
