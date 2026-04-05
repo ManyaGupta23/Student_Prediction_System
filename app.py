@@ -9,7 +9,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 # ==========================================
 # 1. PAGE CONFIG & THEMING
 # ==========================================
-st.set_page_config(page_title="Sherni Student Analytics", layout="wide", page_icon="🎓")
+st.set_page_config(page_title="Student Analytics", layout="wide", page_icon="🎓")
 
 st.markdown("""
 <style>
@@ -87,34 +87,44 @@ def generate_pdf(row):
     return buffer
 
 # ==========================================
-# 4. LOGIN SYSTEM
+# 4. LOGIN SYSTEM (Updated with Image & Logic Fix)
 # ==========================================
 if "login" not in st.session_state:
     st.session_state.login = False
 
-with st.sidebar:
-    st.title(" Student System Portal")
-    if not st.session_state.login:
+if not st.session_state.login:
+    # Use columns to put the login on the left and image on the right
+    col_login, col_img = st.columns([1, 2])
+    
+    with col_login:
+        st.title("Student System Portal")
         input_user = st.text_input("Username / ID")
         input_pass = st.text_input("Password", type="password")
         
         if st.button("Sign In"):
-            # Ensure ID comparison is robust by converting to string
-            match = df_users[(df_users['Username'].astype(str) == input_user) & 
-                             (df_users['Password'].astype(str) == input_pass)]
+            # FIX: Convert both sides to string and strip whitespace
+            u_df_clean = df_users.copy()
+            u_df_clean['Username'] = u_df_clean['Username'].astype(str).str.strip()
+            
+            match = u_df_clean[(u_df_clean['Username'] == str(input_user).strip()) & 
+                               (u_df_clean['Password'].astype(str).str.strip() == str(input_pass).strip())]
             
             if not match.empty:
                 st.session_state.login = True
                 st.session_state.role = match.iloc[0]['Role'].strip().lower()
-                st.session_state.username = input_user
+                st.session_state.username = str(input_user).strip() # Store as clean string
                 st.rerun()
             else:
                 st.error("Invalid Username or Password")
-    else:
-        st.success(f"Role: {st.session_state.role.upper()}")
-        if st.button("Logout"):
-            st.session_state.clear()
-            st.rerun()
+                
+    with col_img:
+        st.header("WELCOME, To the Portal")
+        # Ensure 'portal_image.png' is in your project folder
+        if os.path.exists("portal_image.png"):
+            st.image("portal_image.png", use_container_width=True, caption="Engaged Learning Environment")
+        else:
+            st.info("💡 Tip: Save your project image as 'portal_image.png' to see it here.")
+
 
 # ==========================================
 # 5. DASHBOARDS
@@ -181,32 +191,49 @@ if st.session_state.login:
                     
                     save_all_sheets(df_students, df_users, df_preds)
                     st.success(f"Student Registered! User ID: {nid} | Pass: 123")
+# ==========================================
+# 5. STUDENT DASHBOARD (Fixed Download Logic)
+# ==========================================
+elif st.session_state.login and st.session_state.role == "student":
+    st.markdown('<div class="user-icon">🧑‍🎓</div>', unsafe_allow_html=True)
+    st.title("Student Academic Portal")
+    
+    # FIX: Robust ID Matching
+    curr_id = st.session_state.username
+    # Clean the dataframe IDs for comparison
+    df_students_temp = df_students.copy()
+    df_students_temp['Student_ID'] = df_students_temp['Student_ID'].astype(str).str.strip().str.replace('.0', '', regex=False)
+    
+    my_row = df_students_temp[df_students_temp['Student_ID'] == curr_id]
 
-    # --- STUDENT DASHBOARD ---
-    elif role == "student":
-        st.markdown('<div class="user-icon">🧑‍🎓</div>', unsafe_allow_html=True)
-        st.title("Student Academic Portal")
+    if not my_row.empty:
+        data = my_row.iloc[0]
+        st.subheader(f"Welcome, {data['Name']}")
         
-        curr_id = str(st.session_state.username)
-        my_row = df_students[df_students['Student_ID'].astype(str) == curr_id]
+        # Dashboard Layout
+        c1, c2, c3 = st.columns(3)
+        # Using .get() or direct access with error handling for the PDF
+        try:
+            c1.metric("Attendance", f"{int(float(data['Attendence']))}%")
+        except:
+            c1.metric("Attendance", f"{data['Attendence']}%")
+            
+        c2.metric("Grade", data['Final_Result'])
+        c3.metric("Study Hours", data['Study_Hours'])
+        
+        st.divider()
+        # Generate and Download
+        pdf_report = generate_pdf(data)
+        st.download_button(
+            label="📥 Download Official Report Card",
+            data=pdf_report,
+            file_name=f"Report_{curr_id}.pdf",
+            mime="application/pdf",
+            key="download-btn"
+        )
+    else:
+        st.error(f"Record for ID {curr_id} not found in Student_Data sheet. Please contact Admin.")
 
-        if not my_row.empty:
-            data = my_row.iloc[0]
-            st.subheader(f"Welcome, {data['Name']}")
-            
-            # KPI Metrics
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Attendance", f"{data['Attendence']}%")
-            col2.metric("Grade", data['Final_Result'])
-            col3.metric("Study Hours", data['Study_Hours'])
-            
-            st.divider()
-            st.write("**Visual Progress**")
-            st.progress(int(data['Attendence']))
-            
-            # Detail Breakdown
-            st.write(f"**Internal Marks:** {data['Internal_Marks']} | **Assignments:** {data['Assignment_Score']}")
-            st.write(f"**Performance Index:** {data['Performance_Index']}")
             
             # PDF Generation
             pdf_report = generate_pdf(data)
