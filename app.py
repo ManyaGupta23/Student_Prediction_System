@@ -233,10 +233,10 @@ elif st.session_state.login and st.session_state.role == "student":
         )
     else:
         st.error(f"Record for ID {curr_id} not found in Student_Data sheet. Please contact Admin.")
-
-            
+if not my_row.empty:
+    data= my_row.iloc[0]
             # PDF Generation
             pdf_report = generate_pdf(data)
             st.download_button("📥 Download Official Report Card", pdf_report, file_name=f"Report_{curr_id}.pdf")
-        else:
-            st.error(f"Data not found for ID {curr_id}. Please contact Admin.")
+ else:
+    st.error(f"Data not found for ID {curr_id}. Please contact Admin.")
