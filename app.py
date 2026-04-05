@@ -192,15 +192,16 @@ if st.session_state.login:
                     save_all_sheets(df_students, df_users, df_preds)
                     st.success(f"Student Registered! User ID: {nid} | Pass: 123")
 # ==========================================
-# 5. STUDENT DASHBOARD (Fixed Download Logic)
+# 5. STUDENT DASHBOARD (Cleaned & Fixed)
 # ==========================================
 elif st.session_state.login and st.session_state.role == "student":
     st.markdown('<div class="user-icon">🧑‍🎓</div>', unsafe_allow_html=True)
     st.title("Student Academic Portal")
     
-    # FIX: Robust ID Matching
-    curr_id = st.session_state.username
-    # Clean the dataframe IDs for comparison
+    # Robust ID Matching
+    curr_id = str(st.session_state.username).strip()
+    
+    # Clean the dataframe IDs for comparison to handle Excel float issues (e.g., 101.0 -> 101)
     df_students_temp = df_students.copy()
     df_students_temp['Student_ID'] = df_students_temp['Student_ID'].astype(str).str.strip().str.replace('.0', '', regex=False)
     
@@ -212,31 +213,36 @@ elif st.session_state.login and st.session_state.role == "student":
         
         # Dashboard Layout
         c1, c2, c3 = st.columns(3)
-        # Using .get() or direct access with error handling for the PDF
+        
+        # Formatting Attendance safely
         try:
-            c1.metric("Attendance", f"{int(float(data['Attendence']))}%")
+            att_val = f"{int(float(data['Attendence']))}%"
         except:
-            c1.metric("Attendance", f"{data['Attendence']}%")
+            att_val = f"{data['Attendence']}%"
             
+        c1.metric("Attendance", att_val)
         c2.metric("Grade", data['Final_Result'])
         c3.metric("Study Hours", data['Study_Hours'])
         
         st.divider()
-        # Generate and Download
+        
+        # Visual progress bar
+        try:
+            st.write("**Attendance Progress**")
+            st.progress(int(float(data['Attendence'])) / 100)
+        except:
+            pass
+
+        # Generate and Download PDF
+        # We wrap this in a button to ensure it only generates when needed
         pdf_report = generate_pdf(data)
         st.download_button(
             label="📥 Download Official Report Card",
             data=pdf_report,
             file_name=f"Report_{curr_id}.pdf",
             mime="application/pdf",
-            key="download-btn"
+            key="student_download_pdf"
         )
     else:
-        st.error(f"Record for ID {curr_id} not found in Student_Data sheet. Please contact Admin.")
-if not my_row.empty:
-    data= my_row.iloc[0]
-            # PDF Generation
-            pdf_report = generate_pdf(data)
-            st.download_button("📥 Download Official Report Card", pdf_report, file_name=f"Report_{curr_id}.pdf")
- else:
-    st.error(f"Data not found for ID {curr_id}. Please contact Admin.")
+        st.error(f"Record for ID {curr_id} not found in Student_Data. Please contact the administrator.")
+            
