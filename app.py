@@ -7,63 +7,72 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 
 # ==========================================
-# 1. PAGE CONFIG & UI THEME
+# 1. PAGE SETUP & DATA ENGINE
 # ==========================================
-st.set_page_config(page_title="Student Analytics Portal", layout="wide", page_icon="🎓")
+st.set_page_config(page_title="Student Performance System", layout="wide")
 
 FILE_NAME = "student_performance.xlsx"
 
-# ==========================================
-# 2. DATA ENGINE
-# ==========================================
-def load_and_clean_data():
+def load_all_data():
     if not os.path.exists(FILE_NAME):
-        st.error(f"Error: {FILE_NAME} not found.")
+        st.error(f"Excel file '{FILE_NAME}' not found!")
         return None, None, None
-
+    
+    # Load and clean headers immediately
     s_df = pd.read_excel(FILE_NAME, sheet_name="Students_Data")
     u_df = pd.read_excel(FILE_NAME, sheet_name="Users")
     p_df = pd.read_excel(FILE_NAME, sheet_name="Predictions")
-
-    for df in [s_df, u_df, p_df]:
-        df.columns = df.columns.str.strip()
+    
+    s_df.columns = s_df.columns.str.strip()
+    u_df.columns = u_df.columns.str.strip()
+    p_df.columns = p_df.columns.str.strip()
+    
     return s_df, u_df, p_df
 
-def save_all_sheets(s, u, p):
-    with pd.ExcelWriter(FILE_NAME, engine='openpyxl') as writer:
-        s.to_excel(writer, sheet_name="Students_Data", index=False)
-        u.to_excel(writer, sheet_name="Users", index=False)
-        p.to_excel(writer, sheet_name="Predictions", index=False)
+def save_to_excel(s, u, p):
+    try:
+        with pd.ExcelWriter(FILE_NAME, engine='openpyxl') as writer:
+            s.to_excel(writer, sheet_name="Students_Data", index=False)
+            u.to_excel(writer, sheet_name="Users", index=False)
+            p.to_excel(writer, sheet_name="Predictions", index=False)
+        return True
+    except Exception as e:
+        st.error(f"Save Failed: Ensure the Excel file is CLOSED. Error: {e}")
+        return False
 
-df_students, df_users, df_preds = load_and_clean_data()
+# Initial Load
+df_students, df_users, df_preds = load_all_data()
 
 # ==========================================
-# 3. PDF REPORT GENERATOR
+# 2. PDF GENERATION LOGIC
 # ==========================================
 def generate_pdf(row):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer)
     styles = getSampleStyleSheet()
+    
     elements = [
-        Paragraph("STUDENT REPORT CARD", styles['Title']),
+        Paragraph("OFFICIAL STUDENT REPORT CARD", styles['Title']),
         Spacer(1, 20),
         Paragraph(f"<b>Name:</b> {row['Name']}", styles['Normal']),
-        Paragraph(f"<b>ID:</b> {row['Student_ID']}", styles['Normal']),
-        Spacer(1, 15)
+        Paragraph(f"<b>Student ID:</b> {row['Student_ID']}", styles['Normal']),
+        Spacer(1, 20)
     ]
+    
     data = [
-        ["Metric", "Value"],
+        ["Metric", "Score"],
         ["Attendance", f"{row['Attendence']}%"],
         ["Internal Marks", row['Internal_Marks']],
         ["Assignment Score", row['Assignment_Score']],
         ["Study Hours", row['Study_Hours']],
-        ["Final Grade", row['Final_Result']]
+        ["Final Result", row['Final_Result']]
     ]
+    
     table = Table(data, colWidths=[200, 100])
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.blue),
+        ('BACKGROUND', (0,0), (-1,0), colors.darkblue),
         ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-        ('GRID', (0,0), (-1,-1), 1, colors.grey),
+        ('GRID', (0,0), (-1,-1), 1, colors.black),
         ('ALIGN', (0,0), (-1,-1), 'CENTER')
     ]))
     elements.append(table)
@@ -72,92 +81,123 @@ def generate_pdf(row):
     return buffer
 
 # ==========================================
-# 4. LOGIN & AUTHENTICATION
+# 3. LOGIN & AUTHENTICATION
 # ==========================================
 if "login" not in st.session_state:
     st.session_state.login = False
 
 if not st.session_state.login:
-    col_login, col_img = st.columns([1, 2])
-    with col_login:
-        st.title("Student System Portal")
-        input_user = st.text_input("Username / ID")
-        input_pass = st.text_input("Password", type="password")
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        st.title("System Portal")
+        u_in = st.text_input("Username / ID")
+        p_in = st.text_input("Password", type="password")
         
         if st.button("Sign In"):
             u_clean = df_users.copy()
-            u_clean['Username'] = u_clean['Username'].astype(str).str.replace('.0', '', regex=False).str.strip()
-            u_clean['Password'] = u_clean['Password'].astype(str).str.strip()
+            u_clean['Username'] = u_clean['Username'].astype(str).str.replace('.0', '', regex=False).str.strip().str.lower()
             
-            user_str = str(input_user).strip()
-            pass_str = str(input_pass).strip()
+            user_val = str(u_in).strip().lower()
+            pass_val = str(p_in).strip()
             
-            match = u_clean[(u_clean['Username'] == user_str) & (u_clean['Password'] == pass_str)]
+            match = u_clean[(u_clean['Username'] == user_val) & (u_clean['Password'].astype(str) == pass_val)]
             
             if not match.empty:
                 st.session_state.login = True
                 st.session_state.role = match.iloc[0]['Role'].strip().lower()
-                st.session_state.username = user_str
+                st.session_state.username = user_val
                 st.rerun()
             else:
                 st.error("Invalid Username or Password")
-    with col_img:
-        st.header("WELCOME To the Portal")
-        st.image("portal_image.png", use_container_width=True)
+    with c2:
+        if os.path.exists("portal_image.png"):
+            st.image("portal_image.png", use_container_width=True)
 
 # ==========================================
-# 5. DASHBOARDS
+# 4. PROTECTED CONTENT (ROLES)
 # ==========================================
 else:
     with st.sidebar:
-        st.write(f"### Hello, {st.session_state.username}")
-        if st.button("Logout", type="primary"):
+        st.write(f"Logged in: **{st.session_state.username}**")
+        st.write(f"Role: **{st.session_state.role.upper()}**")
+        if st.button("🚪 Logout", type="primary"):
             st.session_state.clear()
             st.rerun()
 
-    # --- ADMIN: Only see Registration ---
+    # --- ADMIN DASHBOARD ---
     if st.session_state.role == "admin":
         st.title("Administrator Control Panel")
-        tab1, tab2 = st.tabs(["📊 Records Management", "➕ Register New Student"])
-        with tab1:
-            st.dataframe(df_students)
-        with tab2:
-            st.subheader("Institutional Enrollment")
-            with st.form("add_form"):
-                nid = st.text_input("New Student ID")
-                nname = st.text_input("Full Name")
-                natt = st.number_input("Attendance %", 0, 100, 75)
-                nhrs = st.number_input("Study Hours", 0, 24, 4)
-                if st.form_submit_button("Save Student"):
-                    # Logics for saving to Excel would go here
-                    st.success(f"Student {nname} registered successfully!")
+        t1, t2 = st.tabs(["📊 Records Management", "➕ Register New Student"])
+        
+        with t1:
+            st.dataframe(df_students, use_container_width=True)
+            
+        with t2:
+            st.subheader("Add New Student to Database")
+            with st.form("add_student_form", clear_on_submit=True):
+                new_id = st.text_input("Assign Student ID")
+                new_name = st.text_input("Full Name")
+                new_att = st.number_input("Starting Attendance %", 0, 100, 75)
+                new_pass = st.text_input("Assign Password", "1111")
+                
+                if st.form_submit_button("Save to Excel"):
+                    if new_id and new_name:
+                        # Add to Students_Data
+                        new_s = pd.DataFrame([{"Student_ID": new_id, "Name": new_name, "Attendence": new_att, 
+                                               "Internal_Marks": 0, "Assignment_Score": 0, "Study_Hours": 0, "Final_Result": "Pending"}])
+                        # Add to Users
+                        new_u = pd.DataFrame([{"Username": new_id, "Password": new_pass, "Role": "student"}])
+                        
+                        updated_s = pd.concat([df_students, new_s], ignore_index=True)
+                        updated_u = pd.concat([df_users, new_u], ignore_index=True)
+                        
+                        if save_to_excel(updated_s, updated_u, df_preds):
+                            st.success(f"Student {new_name} saved successfully!")
+                            st.rerun()
+                    else:
+                        st.warning("Please fill all required fields.")
 
-    # --- TEACHER: Performance & Prediction ---
+    # --- TEACHER DASHBOARD ---
     elif st.session_state.role == "teacher":
         st.title("Teacher Analytics Portal")
-        tab1, tab2 = st.tabs(["📈 Class Analytics", "🔍 Risk Prediction"])
-        with tab1:
+        t1, t2 = st.tabs(["📉 Class Analytics", "🎯 Prediction Risk"])
+        
+        with t1:
+            st.write("### Attendance vs. Performance Index")
             st.scatter_chart(df_students, x="Attendence", y="Performance_Index")
-        with tab2:
-            st.subheader("Predict Student Performance Risk")
-            student_name = st.selectbox("Select Student", df_students['Name'].unique())
-            student_data = df_students[df_students['Name'] == student_name].iloc[0]
+            st.bar_chart(df_students['Final_Result'].value_counts())
             
-            # Simple Prediction Logic
-            risk = "High Risk" if student_data['Attendence'] < 60 else "Good Standing"
-            st.warning(f"Analysis for {student_name}: **{risk}**")
-            st.write(f"Current Attendance: {student_data['Attendence']}%")
+        with t2:
+            st.subheader("Predict Student Performance Risk")
+            sel_name = st.selectbox("Select Student for Analysis", df_students['Name'].unique())
+            stud = df_students[df_students['Name'] == sel_name].iloc[0]
+            
+            risk = "HIGH RISK" if stud['Attendence'] < 70 else "LOW RISK"
+            st.warning(f"Prediction for {sel_name}: **{risk}**")
+            st.write(f"Current Metrics: Attendance {stud['Attendence']}%, Score {stud['Internal_Marks']}")
 
-    # --- STUDENT: Dashboard & Report ---
+    # --- STUDENT DASHBOARD ---
     elif st.session_state.role == "student":
         st.title("Student Academic Portal")
+        
+        # ID Normalization (Matches user_101 to 101)
+        search_id = st.session_state.username.replace('user_', '')
         s_clean = df_students.copy()
         s_clean['Student_ID'] = s_clean['Student_ID'].astype(str).str.replace('.0', '', regex=False).str.strip()
-        my_data = s_clean[s_clean['Student_ID'] == st.session_state.username]
         
-        if not my_data.empty:
-            data = my_data.iloc[0]
-            st.metric("Final Grade", data['Final_Result'])
-            # FIXED INDENTATION FOR PDF GEN
-            pdf_report = generate_pdf(data)
-            st.download_button("📥 Download Report Card", pdf_report, file_name=f"Report_{st.session_state.username}.pdf")
+        my_record = s_clean[s_clean['Student_ID'] == search_id]
+        
+        if not my_record.empty:
+            data = my_record.iloc[0]
+            st.subheader(f"Welcome, {data['Name']}")
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Attendance", f"{data['Attendence']}%")
+            c2.metric("Grade", data['Final_Result'])
+            c3.metric("Study Hours", f"{data['Study_Hours']} hrs")
+            
+            st.divider()
+            pdf = generate_pdf(data)
+            st.download_button(label="📥 Download My Report Card (PDF)", data=pdf, file_name=f"Report_{search_id}.pdf")
+        else:
+            st.error(f"No record found for ID: {search_id}. Please contact Admin.")
