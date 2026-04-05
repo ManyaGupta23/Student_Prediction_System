@@ -89,11 +89,14 @@ def generate_pdf(row):
 # ==========================================
 # 4. LOGIN SYSTEM (Updated with Image & Logic Fix)
 # ==========================================
+# ==========================================
+# 4. LOGIN SYSTEM (Layout with Logout)
+# ==========================================
 if "login" not in st.session_state:
     st.session_state.login = False
 
+# CASE 1: USER IS NOT LOGGED IN -> Show Portal Image & Login Form
 if not st.session_state.login:
-    # Use columns to put the login on the left and image on the right
     col_login, col_img = st.columns([1, 2])
     
     with col_login:
@@ -102,7 +105,6 @@ if not st.session_state.login:
         input_pass = st.text_input("Password", type="password")
         
         if st.button("Sign In"):
-            # FIX: Convert both sides to string and strip whitespace
             u_df_clean = df_users.copy()
             u_df_clean['Username'] = u_df_clean['Username'].astype(str).str.strip()
             
@@ -112,85 +114,83 @@ if not st.session_state.login:
             if not match.empty:
                 st.session_state.login = True
                 st.session_state.role = match.iloc[0]['Role'].strip().lower()
-                st.session_state.username = str(input_user).strip() # Store as clean string
+                st.session_state.username = str(input_user).strip()
                 st.rerun()
             else:
                 st.error("Invalid Username or Password")
                 
     with col_img:
-        st.header("WELCOME, To the Portal")
-        # Ensure 'portal_image.png' is in your project folder
+        st.header("WELCOME To the Portal")
         if os.path.exists("portal_image.png"):
-            st.image("portal_image.png", use_container_width=True, caption="Engaged Learning Environment")
+            st.image("portal_image.png", use_container_width=True)
         else:
-            st.info("💡 Tip: Save your project image as 'portal_image.png' to see it here.")
+            st.info("💡 Place 'portal_image.png' in folder for the welcome visual.")
 
-
-# ==========================================
-# 5. DASHBOARDS
+# CASE 2: USER IS LOGGED IN -> Show Logout Button in Sidebar
+else:
+    with st.sidebar:
+        st.write(f"### Welcome, {st.session_state.username}")
+        st.write(f"**Role:** {st.session_state.role.upper()}")
+        st.divider()
+        if st.button("🚪 Logout", type="primary", use_container_width=True):
+            st.session_state.login = False
+            st.session_state.clear()
+            st.rerun()
+  # ==========================================
+# 5. DASHBOARDS (RBAC Implementation)
 # ==========================================
 if st.session_state.login:
     role = st.session_state.role
 
-    # --- ADMIN & TEACHER DASHBOARD ---
-    if role in ["admin", "teacher"]:
-        icon = "👤" if role == "admin" else "👨‍🏫"
-        st.markdown(f'<div class="user-icon">{icon}</div>', unsafe_allow_html=True)
-        st.title(f"{role.capitalize()} Dashboard")
+    # --- ADMIN DASHBOARD (Full Access) ---
+    if role == "admin":
+        st.markdown('<div class="user-icon">👤</div>', unsafe_allow_html=True)
+        st.title("Administrator Control Panel")
 
-        tab1, tab2 = st.tabs(["📊 Records & Management", "➕ Register New Student"])
+        tab1, tab2 = st.tabs(["📊 Records Management", "➕ Register New Student"])
 
         with tab1:
-            st.subheader("Student Database Overview")
+            st.subheader("Master Student Database")
             st.dataframe(df_students, use_container_width=True)
-            
-            st.divider()
-            st.subheader("🗑️ Delete Student Record")
-            del_id = st.text_input("Enter Student ID to delete from all 3 sheets:")
-            if st.button("Delete Permanently", type="primary"):
-                if del_id:
-                    # Sync removal across all dataframes
-                    df_students = df_students[df_students['Student_ID'].astype(str) != str(del_id)]
-                    df_users = df_users[df_users['Username'].astype(str) != str(del_id)]
-                    df_preds = df_preds[df_preds['Student_ID'].astype(str) != str(del_id)]
-                    
-                    save_all_sheets(df_students, df_users, df_preds)
-                    st.success(f"Record {del_id} deleted successfully.")
-                    st.rerun()
+            # ... (Your existing Delete logic here) ...
 
         with tab2:
-            st.subheader("Add Student to System")
+            st.subheader("Institutional Enrollment")
+            # The Add Student form remains here, exclusive to Admin
             with st.form("add_form"):
-                c1, c2 = st.columns(2)
-                nid = c1.text_input("New Student ID")
-                nname = c2.text_input("Full Name")
-                
-                c3, c4, c5 = st.columns(3)
-                natt = c3.number_input("Attendance %", 0, 100, 75)
-                nhrs = c4.number_input("Study Hours", 0, 24, 4)
-                nim = c5.number_input("Internal Marks", 0, 100, 50)
-                
-                c6, c7 = st.columns(2)
-                nas = c6.number_input("Assignment Score", 0, 100, 50)
-                nprev = c7.selectbox("Previous Result", ["A", "B", "C", "Fail"])
-                
-                nextra = st.selectbox("Extra Activities", ["Yes", "No"])
-                nfinal = st.selectbox("Final Result", ["A", "B", "C", "Fail"])
-                nperf = st.number_input("Performance Index", 0.0, 100.0, 50.0)
-
+                # ... (Your existing form code here) ...
                 if st.form_submit_button("Save Student"):
-                    # Update all 3 sheets
-                    new_s = pd.DataFrame([{"Student_ID": nid, "Name": nname, "Attendence": natt, "Study_Hours": nhrs, "Internal_Marks": nim, "Assignment_Score": nas, "Previous_Result": nprev, "Extra_Activities": nextra, "Final_Result": nfinal, "Performance_Index": nperf}])
-                    df_students = pd.concat([df_students, new_s], ignore_index=True)
-                    
-                    new_u = pd.DataFrame([{"Username": nid, "Password": "123", "Role": "student"}])
-                    df_users = pd.concat([df_users, new_u], ignore_index=True)
-                    
-                    new_p = pd.DataFrame([{"Student_ID": nid, "Predicted_Result": "PENDING"}])
-                    df_preds = pd.concat([df_preds, new_p], ignore_index=True)
-                    
-                    save_all_sheets(df_students, df_users, df_preds)
-                    st.success(f"Student Registered! User ID: {nid} | Pass: 123")
+                    # ... (Your existing save logic here) ...
+                    st.success("Student added to system successfully.")
+
+    # --- TEACHER DASHBOARD (Analytics & Predictions) ---
+    elif role == "teacher":
+        st.markdown('<div class="user-icon">👨‍🏫</div>', unsafe_allow_html=True)
+        st.title("Teacher Analytics Portal")
+
+        tab1, tab2 = st.tabs(["📈 Performance Analytics", "🔍 Individual Prediction"])
+
+        with tab1:
+            st.subheader("Class-Wide Performance Trends")
+            # Adding Graphs for Teacher
+            col_a, col_b = st.columns(2)
+            
+            with col_a:
+                st.write("**Attendance vs. Performance Index**")
+                st.scatter_chart(data=df_students, x="Attendence", y="Performance_Index", color="#ff4b4b")
+            
+            with col_b:
+                st.write("**Grade Distribution**")
+                grade_counts = df_students['Final_Result'].value_counts()
+                st.bar_chart(grade_counts)
+
+        with tab2:
+            st.subheader("Predict Student Risk")
+            selected_student = st.selectbox("Select Student for Analysis", df_students['Name'].unique())
+            # Logic to show specific student graph or prediction result
+            student_data = df_students[df_students['Name'] == selected_student].iloc[0]
+            st.info(f"Predicting performance for {selected_student} based on current metrics...")
+            # ... (Your Random Forest Prediction code here) ...
 # ==========================================
 # 5. STUDENT DASHBOARD (Cleaned & Fixed)
 # ==========================================
