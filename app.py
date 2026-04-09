@@ -9,7 +9,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 # =========================
 # CONFIG
 # =========================
-st.set_page_config(page_title="Sherni Student Portal", layout="wide")
+st.set_page_config(page_title="Student Portal", layout="wide")
 
 FILE_NAME = "student_performance.xlsx"
 LOGIN_IMAGE = "portal_image.png"
@@ -25,7 +25,7 @@ def load_data():
 
     df_students = pd.read_excel(FILE_NAME, sheet_name="Students_Data") if "Students_Data" in xls.sheet_names else pd.DataFrame()
     df_users = pd.read_excel(FILE_NAME, sheet_name="Users") if "Users" in xls.sheet_names else pd.DataFrame()
-    df_preds = pd.read_excel(FILE_NAME, sheet_name="Predictions") if "Prediction" in xls.sheet_names else pd.DataFrame(columns=["Student_ID","Predicted_Result"])
+    df_preds = pd.read_excel(FILE_NAME, sheet_name="Predictions") if "Predictions" in xls.sheet_names else pd.DataFrame(columns=["Student_ID","Predicted_Result"])
 
     return df_students, df_users, df_preds
 
@@ -34,7 +34,7 @@ def save_data(s, u, p):
     with pd.ExcelWriter(FILE_NAME, engine="openpyxl") as writer:
         s.to_excel(writer, sheet_name="Students_Data", index=False)
         u.to_excel(writer, sheet_name="Users", index=False)
-        p.to_excel(writer, sheet_name="Prediction", index=False)
+        p.to_excel(writer, sheet_name="Predictions", index=False)
 
 
 # =========================
