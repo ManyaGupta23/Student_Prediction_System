@@ -1,222 +1,258 @@
 import streamlit as st
 import pandas as pd
-import os
+import matplotlib.pyplot as plt
 from io import BytesIO
-from PIL import Image
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
+import os
 
-# ================= CONFIG =================
+# =========================
+# CONFIG
+# =========================
+st.set_page_config(page_title="Student Analytics", layout="wide")
+
 FILE_NAME = "student_performance.xlsx"
-PIC_FOLDER = "profile_pics"
-LOGIN_IMAGE = "portal_image.png"
-DEFAULT_AVATAR = "default_avatar.png"
 
-os.makedirs(PIC_FOLDER, exist_ok=True)
-st.set_page_config(page_title="EduPredict Pro", layout="wide")
+# =========================
+# FUNCTIONS
+# =========================
 
-# ================= LOAD =================
 def load_data():
     if not os.path.exists(FILE_NAME):
-        with pd.ExcelWriter(FILE_NAME, engine='openpyxl') as writer:
-            pd.DataFrame(columns=[
-                "Student_ID","Name","Attendence","Internal_Marks",
-                "Assignment_Score","Study_Hours","Final_Result",
-                "Performance_Index","Risk"
-            ]).to_excel(writer, sheet_name="Students_Data", index=False)
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-            pd.DataFrame([
-                {"Username":"admin","Password":"123","Role":"admin"},
-                {"Username":"teacher","Password":"123","Role":"teacher"}
-            ]).to_excel(writer, sheet_name="Users", index=False)
+    df_students = pd.read_excel(FILE_NAME, sheet_name="Students_Data")
+    df_users = pd.read_excel(FILE_NAME, sheet_name="Users")
+    df_preds = pd.read_excel(FILE_NAME, sheet_name="Prediction")
 
-            pd.DataFrame(columns=["Student_ID","Prediction"]).to_excel(writer, sheet_name="Predictions", index=False)
+    return df_students, df_users, df_preds
 
-    xls = pd.ExcelFile(FILE_NAME)
-    s = pd.read_excel(xls, "Students_Data")
-    u = pd.read_excel(xls, "Users")
-    p = pd.read_excel(xls, "Predictions")
 
-    s["Student_ID"] = s["Student_ID"].astype(str).str.strip()
-    u["Username"] = u["Username"].astype(str).str.strip()
-
-    return s,u,p
-
-def save_data(s,u,p):
-    with pd.ExcelWriter(FILE_NAME, engine='openpyxl') as writer:
+def save_data(s, u, p):
+    with pd.ExcelWriter(FILE_NAME, engine="openpyxl") as writer:
         s.to_excel(writer, sheet_name="Students_Data", index=False)
         u.to_excel(writer, sheet_name="Users", index=False)
-        p.to_excel(writer, sheet_name="Predictions", index=False)
+        p.to_excel(writer, sheet_name="Prediction", index=False)
 
-# ================= UTILS =================
-def calculate_risk(idx):
-    if idx < 40: return "HIGH RISK"
-    elif idx < 70: return "MEDIUM RISK"
-    return "LOW RISK"
+
+def calculate_performance(att, marks, assign, study):
+    return (marks * 0.4) + (assign * 0.3) + (att * 0.2) + (study * 2)
+
+
+def add_ranking(df):
+    df = df.copy()
+    df["Rank"] = df["Performance_Index"].rank(ascending=False, method="dense")
+    return df
+
 
 def generate_pdf(row):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer)
     styles = getSampleStyleSheet()
 
-    elements = [
-        Paragraph(f"Report: {row['Name']}", styles['Title']),
-        Spacer(1,20),
-        Table([
-            ["ID", row["Student_ID"]],
-            ["Attendence", f"{row['Attendence']}%"],
-            ["Score", f"{row['Performance_Index']:.2f}"],
-            ["Risk", row["Risk"]]
-        ])
+    elements = []
+    elements.append(Paragraph("STUDENT REPORT CARD", styles['Title']))
+    elements.append(Spacer(1, 12))
+
+    elements.append(Paragraph(f"Name: {row['Name']}", styles['Normal']))
+    elements.append(Paragraph(f"ID: {row['Student_ID']}", styles['Normal']))
+    elements.append(Spacer(1, 12))
+
+    data = [
+        ["Metric", "Value"],
+        ["Attendance", f"{row['Attendence']}%"],
+        ["Marks", row['Internal_Marks']],
+        ["Assignment", row['Assignment_Score']],
+        ["Study Hours", row['Study_Hours']],
+        ["Performance Index", round(row['Performance_Index'], 2)],
+        ["Result", row['Final_Result']]
     ]
 
+    table = Table(data)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.blue),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 1, colors.black)
+    ]))
+
+    elements.append(table)
     doc.build(elements)
+
     buffer.seek(0)
     return buffer
 
-# ================= SESSION =================
-if "auth" not in st.session_state:
-    st.session_state.auth = {"logged_in":False,"user":None,"role":None}
 
+# =========================
+# LOAD DATA
+# =========================
 df_students, df_users, df_preds = load_data()
 
-# ================= LOGIN =================
-if not st.session_state.auth["logged_in"]:
-    col1,col2 = st.columns([1,1.3])
+if "login" not in st.session_state:
+    st.session_state.login = False
 
-    with col1:
-        st.title("🎓 EduPredict Pro")
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
+# =========================
+# LOGIN
+# =========================
+st.sidebar.title("Login")
 
-        if st.button("Login"):
-            match = df_users[(df_users["Username"]==u) & (df_users["Password"].astype(str)==p)]
-            if not match.empty:
-                st.session_state.auth={"logged_in":True,"user":u,"role":match.iloc[0]["Role"]}
-                st.rerun()
-            else:
-                st.error("Invalid login")
+if not st.session_state.login:
+    u = st.sidebar.text_input("Username")
+    p = st.sidebar.text_input("Password", type="password")
 
-    with col2:
-        if os.path.exists(LOGIN_IMAGE):
-            st.image(LOGIN_IMAGE, use_container_width=True)
+    if st.sidebar.button("Login"):
+        match = df_users[(df_users["Username"].astype(str) == u) &
+                         (df_users["Password"].astype(str) == p)]
 
-# ================= MAIN =================
-else:
-    role = st.session_state.auth["role"]
-    user = st.session_state.auth["user"]
-
-    # SIDEBAR
-    with st.sidebar:
-        pic = os.path.join(PIC_FOLDER,f"{user}.png")
-        if os.path.exists(pic):
-            st.image(pic,width=100)
-        elif os.path.exists(DEFAULT_AVATAR):
-            st.image(DEFAULT_AVATAR,width=100)
-
-        st.write(f"👋 {user}")
-        if st.button("Logout"):
-            st.session_state.auth={"logged_in":False,"user":None,"role":None}
+        if not match.empty:
+            st.session_state.login = True
+            st.session_state.role = match.iloc[0]["Role"].lower()
+            st.session_state.user = u
             st.rerun()
+        else:
+            st.sidebar.error("Invalid Login")
+
+else:
+    st.sidebar.success(f"Welcome {st.session_state.user}")
+    if st.sidebar.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
+
+# =========================
+# MAIN APP
+# =========================
+if st.session_state.login:
+
+    role = st.session_state.role
 
     # ================= ADMIN =================
     if role == "admin":
-        st.title("🛡️ Admin Dashboard")
+        st.title("Admin Dashboard")
 
-        if not df_students.empty:
-
-            # 🏆 RANKING
-            df_students["Rank"] = df_students["Performance_Index"].rank(ascending=False, method="dense")
-
-            # 🥇 TOPPER
-            topper = df_students.loc[df_students["Performance_Index"].idxmax()]
-            lowest = df_students.loc[df_students["Performance_Index"].idxmin()]
-
-            c1, c2 = st.columns(2)
-            with c1:
-                st.success(f"🥇 Topper: {topper['Name']} ({topper['Performance_Index']:.1f})")
-            with c2:
-                st.error(f"⚠️ Lowest: {lowest['Name']} ({lowest['Performance_Index']:.1f})")
-
-            st.dataframe(df_students, use_container_width=True)
+        tab1, tab2 = st.tabs(["Add Student", "Delete Student"])
 
         # ADD STUDENT
-        with st.form("add"):
-            sid = st.text_input("Student ID")
-            name = st.text_input("Name")
-            att = st.slider("Attendence",0,100,80)
-            marks = st.slider("Marks",0,100,50)
-            assign = st.slider("Assignment",0,100,50)
-            study = st.slider("Study Hours",0,12,5)
-            result = st.selectbox("Final Result",["Pending","Pass","Fail"])
+        with tab1:
+            with st.form("add"):
+                c1, c2 = st.columns(2)
 
-            if st.form_submit_button("Add"):
-                idx = (marks*0.4)+(assign*0.3)+(att*0.2)+(study*2)
+                sid = c1.text_input("Student ID")
+                name = c2.text_input("Name")
 
-                new = pd.DataFrame([{
-                    "Student_ID":sid,
-                    "Name":name,
-                    "Attendence":att,
-                    "Internal_Marks":marks,
-                    "Assignment_Score":assign,
-                    "Study_Hours":study,
-                    "Final_Result":result,
-                    "Performance_Index":idx,
-                    "Risk":calculate_risk(idx)
-                }])
+                att = c1.slider("Attendence", 0, 100, 80)
+                marks = c2.number_input("Marks", 0, 100, 50)
 
-                df_students = pd.concat([df_students,new], ignore_index=True)
+                assign = c1.number_input("Assignment Score", 0, 100, 50)
+                study = c2.slider("Study Hours", 0, 12, 5)
 
-                df_users = pd.concat([df_users,pd.DataFrame([{
-                    "Username":sid,"Password":"123","Role":"student"
-                }])], ignore_index=True)
+                result = st.selectbox("Final Result", ["Pass", "Fail"])
 
-                save_data(df_students,df_users,df_preds)
-                st.success("Added")
+                if st.form_submit_button("Add Student"):
+
+                    perf = calculate_performance(att, marks, assign, study)
+
+                    new_student = pd.DataFrame([{
+                        "Student_ID": sid,
+                        "Name": name,
+                        "Attendence": att,
+                        "Internal_Marks": marks,
+                        "Assignment_Score": assign,
+                        "Study_Hours": study,
+                        "Final_Result": result,
+                        "Performance_Index": perf
+                    }])
+
+                    df_students = pd.concat([df_students, new_student], ignore_index=True)
+
+                    new_user = pd.DataFrame([{
+                        "Username": sid,
+                        "Password": "123",
+                        "Role": "student"
+                    }])
+
+                    df_users = pd.concat([df_users, new_user], ignore_index=True)
+
+                    new_pred = pd.DataFrame([{
+                        "Student_ID": sid,
+                        "Predicted_Result": result
+                    }])
+
+                    df_preds = pd.concat([df_preds, new_pred], ignore_index=True)
+
+                    save_data(df_students, df_users, df_preds)
+
+                    st.success("Student Added!")
+                    st.rerun()
+
+        # DELETE STUDENT
+        with tab2:
+            st.dataframe(df_students)
+
+            del_id = st.text_input("Enter ID to Delete")
+
+            if st.button("Delete"):
+                df_students = df_students[df_students["Student_ID"].astype(str) != del_id]
+                df_users = df_users[df_users["Username"].astype(str) != del_id]
+                df_preds = df_preds[df_preds["Student_ID"].astype(str) != del_id]
+
+                save_data(df_students, df_users, df_preds)
+
+                st.warning("Deleted Successfully")
                 st.rerun()
 
     # ================= TEACHER =================
     elif role == "teacher":
-        st.title("👨‍🏫 Teacher Dashboard")
+        st.title("Teacher Dashboard")
 
         if not df_students.empty:
 
-            # 🏆 RANKING
-            df_students["Rank"] = df_students["Performance_Index"].rank(ascending=False, method="dense")
+            df_students = add_ranking(df_students)
 
-            st.dataframe(df_students.sort_values("Rank"), use_container_width=True)
+            st.metric("Total Students", len(df_students))
+
+            topper = df_students.loc[df_students["Performance_Index"].idxmax()]
+            lowest = df_students.loc[df_students["Performance_Index"].idxmin()]
+
+            st.success(f"Topper: {topper['Name']}")
+            st.error(f"Lowest: {lowest['Name']}")
+
+            st.subheader("Ranking")
+            st.dataframe(df_students.sort_values("Rank"))
 
             st.bar_chart(df_students.set_index("Name")["Performance_Index"])
 
-            # COMPARE
-            s1 = st.selectbox("Student 1", df_students["Student_ID"])
-            s2 = st.selectbox("Student 2", df_students["Student_ID"])
+            # COMPARISON
+            st.subheader("Compare Students")
+
+            names = df_students["Name"].tolist()
+
+            s1 = st.selectbox("Student 1", names)
+            s2 = st.selectbox("Student 2", names)
 
             if s1 and s2:
-                d1 = df_students[df_students["Student_ID"]==s1].iloc[0]
-                d2 = df_students[df_students["Student_ID"]==s2].iloc[0]
+                d1 = df_students[df_students["Name"] == s1].iloc[0]
+                d2 = df_students[df_students["Name"] == s2].iloc[0]
 
                 comp = pd.DataFrame({
-                    "Metric":["Attendence","Marks","Performance"],
-                    s1:[d1["Attendence"],d1["Internal_Marks"],d1["Performance_Index"]],
-                    s2:[d2["Attendance"],d2["Internal_Marks"],d2["Performance_Index"]]
+                    "Metric": ["Marks", "Attendance", "Assignment", "Study Hours", "Performance"],
+                    s1: [d1["Internal_Marks"], d1["Attendence"], d1["Assignment_Score"], d1["Study_Hours"], d1["Performance_Index"]],
+                    s2: [d2["Internal_Marks"], d2["Attendence"], d2["Assignment_Score"], d2["Study_Hours"], d2["Performance_Index"]]
                 })
 
-                st.bar_chart(comp.set_index("Metric"))
+                st.dataframe(comp)
 
     # ================= STUDENT =================
     elif role == "student":
-        st.title("📝 My Performance")
+        st.title("Student Dashboard")
 
-        my = df_students[df_students["Student_ID"]==user]
+        row_df = df_students[df_students["Student_ID"].astype(str) == st.session_state.user]
 
-        if not my.empty:
-            row = my.iloc[0]
+        if not row_df.empty:
+            row = row_df.iloc[0]
 
-            st.metric("Attendence",row["Attendence"])
-            st.metric("Score",row["Performance_Index"])
-            st.metric("Risk",row["Risk"])
+            st.metric("Performance Index", round(row["Performance_Index"], 2))
+            st.progress(int(row["Attendence"]))
 
-            st.download_button("Download PDF", generate_pdf(row), "report.pdf")
-        else:
-            st.error("No record found")
+            pdf = generate_pdf(row)
+
+            st.download_button("Download Report", pdf, file_name="report.pdf")
