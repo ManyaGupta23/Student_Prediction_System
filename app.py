@@ -1,11 +1,10 @@
-import streamlit as st 
-import pandas as pd 
-import os 
-from io import BytesIO 
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table 
-from reportlab.lib import colors from reportlab.lib.styles 
-import getSampleStyleSheet
-
+import streamlit as st
+import pandas as pd
+import os
+from io import BytesIO
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
 =========================
 
 CONFIG
