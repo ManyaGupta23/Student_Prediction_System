@@ -5,7 +5,6 @@ from io import BytesIO
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
-=========================
 
 CONFIG
 
@@ -203,7 +202,7 @@ if role == "admin":
             sid = st.text_input("Student ID")
             name = st.text_input("Student Name")
             spass = st.text_input("Password", value="123")
-            attendence = st.slider("Attendence", 0, 100, 75)
+            atteneance = st.slider("Attendence", 0, 100, 75)
             marks = st.number_input("Internal Marks", 0, 100, 50)
             assignment = st.number_input("Assignment Score", 0, 100, 50)
             study_hours = st.number_input("Study Hours", 0, 15, 5)
@@ -212,7 +211,7 @@ if role == "admin":
                 if sid in df_students["Student_ID"].values:
                     st.error("Student ID already exists")
                 else:
-                    idx = marks*0.5 + assignment*0.3 + attendance*0.2
+                    idx = marks*0.5 + assignment*0.3 + attendence*0.2
                     final_result = "Pass" if idx >= 40 else "Fail"
 
                     new_student = pd.DataFrame([{
