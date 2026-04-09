@@ -18,7 +18,8 @@ A multi-user Streamlit web application designed for educational institutions to 
 - Data Handling: Pandas & Openpyxl
 - PDF Generation: ReportLab
 - Database: Excel (.xlsx)
-**🚀 Getting Started**
+
+# **🚀 Getting Started**
 Prerequisites
 Python 3.8 or higher
 Pip (Python package manager)
