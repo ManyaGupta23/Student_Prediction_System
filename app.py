@@ -106,7 +106,7 @@ if not st.session_state.login:
     col1, col2 = st.columns([1, 1.2])
 
     with col1:
-        st.title("🎓 Sherni Student Portal")
+        st.title("🎓Student Portal")
 
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
